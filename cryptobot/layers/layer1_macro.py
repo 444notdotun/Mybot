@@ -98,11 +98,11 @@ class MacroLayer:
 
         # Run Binance calls + CoinGecko simple in parallel
         coin_id = CG_SIMPLE_IDS.get(ticker)
-        spot_task = fetcher.binance_ticker(ticker)
+        spot_task = fetcher.get_ticker(ticker)
         cg_task = _cg_simple(coin_id) if coin_id else asyncio.sleep(0, result={})
         funding_task = fetcher.binance_funding_rate(ticker)
         oi_task = fetcher.binance_open_interest(ticker)
-        klines_task = fetcher.binance_klines(ticker, "1d", 10)
+        klines_task = fetcher.get_klines(ticker, 10)
 
         spot, cg, funding_list, oi, klines = await asyncio.gather(
             spot_task, cg_task, funding_task, oi_task, klines_task

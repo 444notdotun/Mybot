@@ -1,158 +1,107 @@
 # ⚡ DOTMAN CRYPTO INTELLIGENCE BOT
 
-Four-Layer Live Market Intelligence System — Telegram Bot
+> Four-Layer Live Market Intelligence System — Telegram Bot
+
+A production-grade crypto trading signal bot powered by Claude AI. Pulls live data from Binance, CoinGecko, Polymarket, and Fear & Greed Index simultaneously, then synthesizes everything into one direct trade signal.
 
 ---
 
-## WHAT IT DOES
+## HOW IT WORKS
 
-Every command pulls live data from real APIs. Nothing cached. Nothing guessed.
+Every scan runs four layers in parallel:
 
 | Layer | What it does |
 |-------|-------------|
-| 🔴 Layer 1 | Live BTC, ETH, macro gate, Fear & Greed, dominance |
-| 🟠 Layer 2 | Alpha hunting — trending, low-cap plays, safety checks |
-| 🟡 Layer 3 | Polymarket live event odds + crypto impact |
-| 🟢 Layer 4 | Pattern recognition — RSI, support/resistance, pump stage |
+| 🔴 Layer 1 — Macro | Live BTC, ETH, dominance, Fear & Greed, funding rate, OI |
+| 🟠 Layer 2 — Alpha | Trending coins, safety checks, cross-exchange symbols |
+| 🟡 Layer 3 — Polymarket | Live prediction market odds + crypto event impact |
+| 🟢 Layer 4 — Patterns | RSI, support/resistance, pump stage, pattern detection |
 
-Claude API synthesizes all 4 layers into one direct trade signal.
+Claude API synthesizes all four layers into one direct signal: entry zone, three take-profit levels, stop loss, leverage guidance, and confluence score.
 
 ---
 
-## SETUP — DO THIS ONCE
+## FEATURES
 
-### Step 1: Get your Telegram Bot Token
+- **Live signals** — `/scan SOL` → full 4-layer buy/sell signal in under 5 seconds
+- **Spot + Perpetual** — separate signal structure for each trade type
+- **Pump stage detection** — identifies Stage 1–5 from live kline data
+- **Price alerts** — `/alert BTC 90000` pings you the moment price hits
+- **Portfolio tracker** — tracks your positions with live PnL in dollars and %
+- **Auto-scanner** — scans your watchlist every 2 hours, pushes signals automatically
+- **Macro gate** — Red/Yellow/Green verdict before every signal
+- **Polymarket integration** — event odds mapped to crypto impact
 
-1. Open Telegram and search for `@BotFather`
-2. Send `/newbot`
-3. Follow prompts — give your bot a name and username
-4. BotFather gives you a token like: `7123456789:AAFxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
-5. Copy it
+---
 
-### Step 2: Get your Anthropic API Key
+## COMMANDS
 
-1. Go to https://console.anthropic.com
-2. Click API Keys → Create Key
-3. Copy the key (starts with `sk-ant-...`)
+### Analysis
+| Command | Description |
+|---------|-------------|
+| `/scan [COIN]` | Full 4-layer signal — asks Spot or Perpetual |
+| `/macro` | Live macro gate check |
+| `/stage [COIN]` | Pump stage detection only |
+| `/price [COIN]` | Quick live price block |
+| `/alpha` | Top trending alpha plays |
+| `/poly` | Live Polymarket signals |
+| `/fng` | Fear & Greed Index |
 
-### Step 3: Install Python dependencies
+### Alerts
+| Command | Description |
+|---------|-------------|
+| `/alert BTC 90000` | Ping when BTC hits $90K |
+| `/alerts` | View all active alerts |
+| `/clearalerts` | Remove all alerts |
 
-Make sure you have Python 3.10+ installed.
+### Portfolio
+| Command | Description |
+|---------|-------------|
+| `/portfolio` | View positions with live PnL |
+| `/portfolio add SOL 10 85.00` | Add position (ticker, amount, entry) |
+| `/portfolio remove SOL` | Remove position |
+
+### Watchlist
+| Command | Description |
+|---------|-------------|
+| `/watchlist` | View watchlist |
+| `/watch add TAO` | Add coin to watchlist |
+| `/watch remove TAO` | Remove coin |
+
+---
+
+## SETUP
+
+### Requirements
+- Python 3.10+
+- Telegram Bot Token from @BotFather
+- Anthropic API Key from console.anthropic.com
+
+### Install
 
 ```bash
-cd cryptobot
+git clone https://github.com/YOURUSERNAME/dotman-bot.git
+cd dotman-bot
 pip install -r requirements.txt
 ```
 
-### Step 4: Configure environment
+### Configure
 
 ```bash
 cp .env.example .env
 ```
 
 Open `.env` and fill in:
+
 ```
-TELEGRAM_TOKEN=your_token_from_botfather
-ANTHROPIC_API_KEY=sk-ant-your-key-here
+TELEGRAM_TOKEN=your_telegram_bot_token_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ```
 
-### Step 5: Run the bot
+### Run
 
 ```bash
-python bot.py
-```
-
-You should see:
-```
-🚀 DOTMAN BOT LIVE — Polling started
-```
-
-Now open Telegram, find your bot, and send `/start`
-
----
-
-## BOT COMMANDS
-
-| Command | What it does |
-|---------|-------------|
-| `/start` | Launch screen |
-| `/macro` | Full live macro gate — BTC, dominance, F&G, ETH/BTC |
-| `/scan SOL` | Full 4-layer signal on any coin |
-| `/alpha` | Hunt top alpha plays right now |
-| `/poly` | Live Polymarket event odds |
-| `/fng` | Fear & Greed Index live |
-| `/price BTC` | Quick live price block |
-| `/stage SOL` | Pump stage detection only |
-| `/help` | All commands |
-
-**You can also just type any ticker** — `SOL`, `BTC`, `TAO`, `WIF` — and the bot auto-detects it and asks Spot or Perp.
-
----
-
-## HOW A SCAN WORKS
-
-1. You type a ticker or use `/scan TICKER`
-2. Bot asks: **Spot or Perpetual?** (buttons)
-3. You tap your answer
-4. Bot pulls live data from all 4 layers simultaneously:
-   - Binance API (price, klines, funding rate, OI)
-   - CoinGecko (market cap, ATH, rank, 7D change)
-   - Fear & Greed Index
-   - Polymarket (live event odds)
-5. Claude synthesizes everything into one signal with exact entry, 3 TPs, stop loss, leverage, and confluence score
-6. Output arrives in ~5–10 seconds
-
----
-
-## DATA SOURCES
-
-All free, no API key required for basic usage:
-
-- **Binance REST** — `api.binance.com/api/v3/`
-- **Binance Futures** — `fapi.binance.com/fapi/v1/`
-- **CoinGecko** — `api.coingecko.com/api/v3/`
-- **Fear & Greed** — `api.alternative.me/fng/`
-- **Polymarket** — `gamma-api.polymarket.com/markets`
-- **DEXScreener** — `api.dexscreener.com/`
-
----
-
-## RUNNING 24/7 (VPS / Server)
-
-For continuous operation, use `screen` or `tmux`:
-
-```bash
-# Using screen
-screen -S dotman
-python bot.py
-# Ctrl+A then D to detach
-```
-
-Or use `systemd` for auto-restart on crashes — create `/etc/systemd/system/dotman.service`:
-
-```ini
-[Unit]
-Description=Dotman Crypto Bot
-After=network.target
-
-[Service]
-Type=simple
-User=your_username
-WorkingDirectory=/path/to/cryptobot
-ExecStart=/usr/bin/python3 bot.py
-Restart=always
-RestartSec=10
-EnvironmentFile=/path/to/cryptobot/.env
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then:
-```bash
-sudo systemctl enable dotman
-sudo systemctl start dotman
-sudo systemctl status dotman
+python3 bot.py
 ```
 
 ---
@@ -161,38 +110,67 @@ sudo systemctl status dotman
 
 ```
 cryptobot/
-├── bot.py                  ← Entry point, Telegram handlers
-├── config.py               ← All config + API URLs
+├── bot.py                    ← Entry point, all Telegram handlers
+├── config.py                 ← Config + API base URLs
 ├── requirements.txt
-├── .env.example            ← Copy to .env and fill keys
-├── .gitignore
+├── .env.example              ← Copy to .env, never commit .env
 │
 ├── core/
-│   ├── data_fetcher.py     ← All live API calls (Binance, CoinGecko, etc.)
-│   ├── signal_engine.py    ← Orchestrator — runs 4 layers, calls Claude
-│   └── session_manager.py  ← Per-user state tracking
+│   ├── data_fetcher.py       ← All live API calls
+│   ├── signal_engine.py      ← Orchestrator — runs 4 layers, calls Claude
+│   ├── alert_manager.py      ← Price alerts + portfolio + watchlist
+│   ├── auto_scanner.py       ← 2H background scanner + alert checker
+│   └── session_manager.py    ← Per-user state
 │
 ├── layers/
-│   ├── layer1_macro.py     ← Macro gate, price block, F&G
-│   ├── layer2_alpha.py     ← Alpha hunting, safety check, exchange symbols
-│   ├── layer3_polymarket.py ← Polymarket signals + phase detection
-│   └── layer4_patterns.py  ← RSI, patterns, pump stage, support/resistance
+│   ├── layer1_macro.py       ← Macro gate, live price block, F&G
+│   ├── layer2_alpha.py       ← Alpha hunting, safety check, exchange symbols
+│   ├── layer3_polymarket.py  ← Polymarket signals + phase detection
+│   └── layer4_patterns.py    ← RSI, patterns, pump stage, support/resistance
 │
-└── utils/
-    └── formatter.py        ← Number formatting for Telegram
+├── utils/
+│   └── formatter.py          ← Number formatting
+│
+└── data/                     ← Auto-created — alerts, portfolio, watchlist
 ```
 
 ---
 
-## NEXT STEPS (PLANNED)
+## DATA SOURCES
 
-- [ ] Polymarket price alert monitoring (auto-ping on 15%+ odds shift)
-- [ ] Price alert system (`/alert BTC 100000`)
-- [ ] Portfolio tracker (`/portfolio`)
-- [ ] DEX token contract address scanning
-- [ ] Webhook mode for production (vs polling)
-- [ ] PostgreSQL for signal history and backtesting
+| Source | Data |
+|--------|------|
+| Binance REST | Price, klines, 24H stats |
+| Binance Futures | Funding rate, open interest |
+| CoinGecko | Market cap, 7D change, trending |
+| Fear & Greed | Sentiment index |
+| Polymarket | Live prediction market odds |
+| DEXScreener | DEX token data |
 
 ---
 
-⚠️ **NOT FINANCIAL ADVICE.** This is a personal trading tool. Never risk more than you can afford to lose completely.
+## PUMP STAGES
+
+| Stage | Meaning | Action |
+|-------|---------|--------|
+| 1 — Silent Accumulation | Smart money buying quietly | Best entry window |
+| 2 — Breakout Loading | Compression before move | Prepare entry |
+| 3 — Breakout Confirmed | Volume explosion + pattern break | Enter fast |
+| 4 — Parabolic | Overextended, no clean entry | Take profits only |
+| 5 — Distribution | Smart money selling into you | Exit now |
+
+---
+
+## ENVIRONMENT VARIABLES
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TELEGRAM_TOKEN` | Yes | From @BotFather |
+| `ANTHROPIC_API_KEY` | Yes | From console.anthropic.com |
+| `COINGECKO_API_KEY` | No | Free tier works without this |
+
+---
+
+## DISCLAIMER
+
+Personal trading tool only. Not financial advice. Never invest more than you can afford to lose.
