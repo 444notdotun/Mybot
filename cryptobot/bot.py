@@ -30,7 +30,9 @@ from core.signal_history    import (
 )
 from core.ai_chat           import chat_with_memory, ConversationMemory
 from core.backtest_engine   import run_backtest, format_backtest_report
-from core.opportunity_scanner import run_opportunity_scanner
+from core.opportunity_scanner import run_opportunity_scanner, run_single_coin_scan
+from core.websocket_lane import websocket_lane
+from layers.layer7_macro_intel import macro_intel
 from layers.layer1_macro    import MacroLayer
 from layers.layer2_alpha    import AlphaLayer
 from layers.layer3_polymarket import PolymarketLayer
@@ -39,6 +41,10 @@ from layers.layer5_whale    import whale_detector
 from layers.layer6_liquidity import liquidity_checker
 from utils.formatter        import format_error
 import config
+
+# ── VERSION ───────────────────────────────────────────────────────────────────
+BOT_VERSION = "v8 — Bidirectional Scanner + WebSocket + 7 Layers"
+DEPLOY_TIME = None  # Set at runtime
 
 logging.basicConfig(
     format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
@@ -93,6 +99,15 @@ def _split(text: str, limit: int = 4000) -> list:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     register_user(update.effective_user.id)
+    # Send startup notification if user is new and bot just deployed
+    global DEPLOY_TIME
+    if DEPLOY_TIME:
+        from datetime import datetime, timezone
+        elapsed = (datetime.now(timezone.utc) - DEPLOY_TIME).total_seconds()
+        if elapsed < 300 and uid not in registered_users:
+            # New user joined within 5 minutes of deploy — they missed the notification
+            pass  # They'll see the welcome message below
+
     await update.message.reply_text(
         "DOTMAN CRYPTO INTELLIGENCE BOT\n"
         "6-Layer Live Market Intelligence\n\n"
@@ -128,7 +143,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/ask [question] — Ask anything\n"
         "/endchat        — Exit chat mode\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "Just type any ticker: BTC SOL ETH TAO"
+        "Just type any ticker: BTC SOL ETH TAO\n\n"
+        "NEW: /macro7 [COIN] — DXY + 10Y yield + CVD + options\n"
+        "WebSocket fast lane active — real-time detection"
     )
 
 
@@ -235,6 +252,20 @@ async def poly_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await safe_send(update.message, await PolymarketLayer().top_signals())
     except Exception as e:
         await update.message.reply_text(format_error("POLYMARKET", str(e)))
+
+
+async def macro7_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    register_user(update.effective_user.id)
+    if not context.args:
+        await update.message.reply_text("Usage: /macro7 BTC")
+        return
+    ticker = context.args[0].upper()
+    await update.message.reply_text(f"Pulling macro intelligence for {ticker}...")
+    try:
+        data = await macro_intel.full_analysis(ticker)
+        await safe_send(update.message, macro_intel.format_block(data, ticker))
+    except Exception as e:
+        await update.message.reply_text(format_error(ticker, str(e)))
 
 
 async def fng_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -542,6 +573,72 @@ async def run_signal_checker(app):
 
 # ── STARTUP ───────────────────────────────────────────────────────────────────
 
+async def _send_startup_notification(app):
+    """Send deployment alert to all registered users"""
+    from datetime import datetime, timezone
+    import os
+
+    global DEPLOY_TIME
+    DEPLOY_TIME = datetime.now(timezone.utc)
+    ts = DEPLOY_TIME.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    # Read version from file if exists
+    version_file = os.path.join(os.path.dirname(__file__), "data/version.txt")
+    prev_version = "Unknown"
+    try:
+        os.makedirs(os.path.dirname(version_file), exist_ok=True)
+        if os.path.exists(version_file):
+            with open(version_file) as f:
+                prev_version = f.read().strip()
+        with open(version_file, "w") as f:
+            f.write(BOT_VERSION)
+    except Exception:
+        pass
+
+    msg = (
+        f"DOTMAN BOT DEPLOYED\n"
+        f"{'━'*32}\n"
+        f"Version  : {BOT_VERSION}\n"
+        f"Deployed : {ts}\n"
+        f"{'━'*32}\n"
+        f"\n"
+        f"ALL SYSTEMS ACTIVE:\n"
+        f"  Layer 1 — Macro gate\n"
+        f"  Layer 2 — Alpha hunting\n"
+        f"  Layer 3 — Polymarket\n"
+        f"  Layer 4 — Pattern recognition\n"
+        f"  Layer 5 — Whale detection\n"
+        f"  Layer 6 — Liquidity depth\n"
+        f"  Layer 7 — DXY + CVD + Options\n"
+        f"\n"
+        f"BACKGROUND TASKS:\n"
+        f"  WebSocket fast lane — active\n"
+        f"  Opportunity scanner — every 10 min\n"
+        f"  Alert checker — every 60 sec\n"
+        f"  Signal checker — every 5 min\n"
+        f"  Auto scanner — every 2 hours\n"
+        f"\n"
+        f"Scanner: BUY and SELL alerts active\n"
+        f"{'━'*32}\n"
+        f"Bot is live. Send /start to begin."
+    )
+
+    # Wait a moment for users to be registered
+    await asyncio.sleep(3)
+
+    # Send to all registered users
+    sent = 0
+    for uid in list(registered_users):
+        try:
+            await app.bot.send_message(chat_id=uid, text=msg)
+            sent += 1
+        except Exception as e:
+            logger.error(f"Startup notify error for {uid}: {e}")
+
+    # If no registered users yet, store notification to send on first /start
+    logger.info(f"Startup notification sent to {sent} users")
+
+
 async def post_init(application: Application):
     await application.bot.set_my_commands([
         BotCommand("start",       "Launch the bot"),
@@ -551,6 +648,7 @@ async def post_init(application: Application):
         BotCommand("stage",       "Pump stage detection"),
         BotCommand("whale",       "Whale activity"),
         BotCommand("liq",         "Order book depth"),
+        BotCommand("macro7",      "DXY + yield + CVD + options"),
         BotCommand("alpha",       "Top alpha plays"),
         BotCommand("poly",        "Polymarket signals"),
         BotCommand("fng",         "Fear and Greed Index"),
@@ -572,7 +670,16 @@ async def post_init(application: Application):
     asyncio.create_task(run_auto_scanner(application, list(registered_users)))
     asyncio.create_task(run_signal_checker(application))
     asyncio.create_task(run_opportunity_scanner(application, lambda: list(registered_users)))
-    logger.info("All 4 background tasks started")
+
+    # WebSocket fast lane — real-time price/volume monitoring
+    async def ws_scan_callback(ticker: str, user_id: int):
+        await run_single_coin_scan(ticker, user_id, application)
+
+    asyncio.create_task(websocket_lane.run(lambda: list(registered_users), ws_scan_callback))
+    logger.info("All 5 background tasks started — WebSocket fast lane active")
+
+    # Send startup notification to all registered users
+    asyncio.create_task(_send_startup_notification(application))
 
 
 async def post_shutdown(application: Application):
@@ -598,6 +705,7 @@ def main():
     app.add_handler(CommandHandler("stage",       stage_cmd))
     app.add_handler(CommandHandler("whale",       whale_cmd))
     app.add_handler(CommandHandler("liq",         liq_cmd))
+    app.add_handler(CommandHandler("macro7",      macro7_cmd))
     app.add_handler(CommandHandler("alpha",       alpha_cmd))
     app.add_handler(CommandHandler("poly",        poly_cmd))
     app.add_handler(CommandHandler("fng",         fng_cmd))

@@ -20,6 +20,7 @@ from layers.layer4_patterns import PatternLayer
 from layers.layer5_whale import whale_detector
 from layers.layer6_liquidity import liquidity_checker
 from core.data_fetcher import fetcher, utc_now
+from core.signal_history import log_signal
 from core.backtest_engine import get_pattern_confidence_boost
 from utils.formatter import fmt_price, fmt_large
 import config
@@ -110,7 +111,7 @@ class SignalEngine:
         self.poly   = PolymarketLayer()
         self.pattern = PatternLayer()
 
-    async def full_scan(self, ticker: str, trade_type: str) -> str:
+    async def full_scan(self, ticker: str, trade_type: str, user_id: int = 0) -> str:
         ts = utc_now()
         ticker = ticker.upper()
 
@@ -154,6 +155,14 @@ class SignalEngine:
         whale_block = whale_detector.format_whale_block(whale_data) if whale_data and not whale_data.get("error") else ""
         liq_block   = liquidity_checker.format_liquidity_block(liq_data) if liq_data and not liq_data.get("error") else ""
 
+        # Auto-log signal to backtest database
+        try:
+            await self._auto_log_signal(
+                ticker, trade_type, signal, pattern_data, macro_block, user_id=0
+            )
+        except Exception:
+            pass  # Never let logging failure break the signal
+
         parts = [price_block, exchange_block]
         if whale_block:
             parts.append(whale_block)
@@ -162,6 +171,77 @@ class SignalEngine:
         parts.append(signal)
 
         return "\n\n".join(p for p in parts if p)
+
+    async def _auto_log_signal(self, ticker, trade_type, signal_text,
+                               pattern_data, macro_block, user_id=0):
+        """Parse Claude signal output and log to backtest database"""
+        import re
+
+        # Extract key levels from signal text using regex
+        def extract_price(pattern, text):
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                try:
+                    return float(match.group(1).replace(",", ""))
+                except Exception:
+                    pass
+            return 0.0
+
+        # Only log actual buy/sell signals, not NO TRADE
+        if "NO TRADE" in signal_text.upper():
+            return
+
+        direction = "BUY"
+        if "SHORT" in signal_text.upper() or "SELL" in signal_text.upper():
+            direction = "SELL"
+
+        entry = extract_price(r'ENTRY[^$]*\$([\d,\.]+)', signal_text)
+        tp1   = extract_price(r'TP1[^$]*\$([\d,\.]+)', signal_text)
+        tp2   = extract_price(r'TP2[^$]*\$([\d,\.]+)', signal_text)
+        tp3   = extract_price(r'TP3[^$]*\$([\d,\.]+)', signal_text)
+        stop  = extract_price(r'STOP[^$]*\$([\d,\.]+)', signal_text)
+
+        if not entry or not tp1 or not stop:
+            return  # Can't log without basic levels
+
+        # Extract macro gate
+        macro_gate = "GREEN"
+        if "RED LIGHT" in macro_block or "RED" in macro_block.upper():
+            macro_gate = "RED"
+        elif "YELLOW LIGHT" in macro_block or "YELLOW" in macro_block.upper():
+            macro_gate = "YELLOW"
+
+        # Extract confidence
+        confidence = "Medium"
+        if "HIGH" in signal_text.upper():
+            confidence = "High"
+        elif "LOW" in signal_text.upper():
+            confidence = "Low"
+        elif "HIGHEST" in signal_text.upper():
+            confidence = "Highest"
+
+        p = pattern_data if isinstance(pattern_data, dict) else {}
+        stage = p.get("stage", 1)
+        pattern = p.get("pattern", "Unknown")
+
+        try:
+            log_signal(
+                user_id=user_id,
+                ticker=ticker,
+                direction=direction,
+                trade_type=trade_type,
+                entry_price=entry,
+                tp1=tp1,
+                tp2=tp2,
+                tp3=tp3,
+                stop_loss=stop,
+                stage=stage,
+                pattern=pattern,
+                macro_gate=macro_gate,
+                confidence=confidence,
+            )
+        except Exception:
+            pass
 
     def _build_context(self, ticker, trade_type, ts,
                        price_block, macro_block, poly_block,
